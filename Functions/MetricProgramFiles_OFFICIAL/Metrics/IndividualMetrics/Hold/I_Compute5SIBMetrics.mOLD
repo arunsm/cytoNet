@@ -1,0 +1,189 @@
+function [header values] = Compute5SIBMetrics(data)
+
+fprintf('Compute5SIBMetrics: Distorted contours; see testSIB.m\n');
+fprintf('Compute5SIBMetrics: Multiple nuclei\n');
+fprintf('Compute5SIBMetrics: Contour band averages include zeros from outside the band\n');
+% fprintf('Compute5SIBMetrics: Remove nucleus stain from this metric\n');
+
+metrics = {'MeanLocationAboveAvg', 'MeanLocation', 'MaxLocation', 'MaxIntensity', 'Slope'};
+nummetrics = numel(metrics);
+staindata = data.staindata;
+numstains = numel(staindata);
+stainNames = fieldnames(data.stainkey);
+% Limit the number of stain names to the number of stain images and
+% omit metrics for nucleus stain
+nucleusIndex = data.stainkey.nucleus;
+numUsableStains = numstains;
+if (nucleusIndex > 0) & (nucleusIndex <= numstains)
+    numUsableStains = numUsableStains - 1;
+    switch nucleusIndex
+        case 1
+            stainNames = stainNames(2:end);
+        case numel(stainNames)
+            stainNames = stainNames(1:end-1);
+        otherwise
+            stainNames = stainNames([1:nucleusIndex-1, nucleusIndex+1:end]);
+    end
+end
+header = {};
+for i = 1:nummetrics
+    h = strcat(metrics{i}, {' '}, stainNames)';
+    for j = 1:numel(h)
+        header{end+1} = h{j};
+    end
+end
+
+stainImage = data.staindata;
+nuMask = data.nucleusmaskdata;
+cyMask = data.cytomaskdata;
+numOfCell = numel(nuMask);
+numOfStain = numel(stainImage);
+set_stain = 1:numOfStain;
+aDiv = 100;
+rDiv = 10;
+[row, col] = size(nuMask{1});
+
+values = zeros(numOfCell, numel(header));
+
+SIB = ComputeSIB(stainImage,nuMask,cyMask,numOfCell,numOfStain,aDiv,rDiv,set_stain,row,col);
+location = linspace(100/rDiv,100,rDiv);
+loc80 = .80;
+loc20 = .20;
+idx80 = round(loc80*rDiv);
+idx20 = round(loc20*rDiv);
+    
+for idx_cell = 1:numOfCell
+    tableIndex = 1;
+    for idx_stain = 1:numOfStain
+        % Omit metrics for nucleus stain
+        if idx_stain == nucleusIndex
+            continue;
+        end
+        intensity = SIB.intensityavg{idx_cell}(idx_stain,:);
+
+        idx_location = intensity >= mean(intensity);
+        MeanLocationAboveAvg = mean(intensity(idx_location).*location(idx_location))/max(intensity);
+        MeanLocation = mean(location.*intensity)/max(intensity);
+        MaxLocation = find(intensity == max(intensity),1);
+        MaxIntensity = max(intensity);
+        Slope = (intensity(idx80)-intensity(idx20))/(loc80-loc20);
+        
+        values(idx_cell, tableIndex) = MeanLocationAboveAvg;
+        values(idx_cell, tableIndex + numUsableStains) = MeanLocation;
+        values(idx_cell, tableIndex + (2 * numUsableStains)) = MaxLocation;
+        values(idx_cell, tableIndex + (3 * numUsableStains)) = MaxIntensity;
+        values(idx_cell, tableIndex + (4 * numUsableStains)) = Slope;
+        tableIndex = tableIndex + 1;
+    end
+end
+    
+end
+
+function SIB = ComputeSIB(stainImage,nuMask,cyMask,numOfCell,numOfStain,aDiv,rDiv,set_stain,row,col)
+
+theta = linspace(eps,pi-(eps),round(aDiv/2));
+nTheta = length(theta);
+maxfractionaldelta = 0;
+for idx_cell = 1:numOfCell
+    tic
+    fprintf('Processing cell #%g:\n',idx_cell)
+    
+    % find the centroid of the cell
+    statTemp = regionprops(nuMask{idx_cell},'Centroid');
+    
+    centroid = statTemp.Centroid;
+    
+    xc = round(centroid(1));
+    yc = round(centroid(2));
+    
+%     xc = round(statTemp.Centroid(1));
+%     yc = round(statTemp.Centroid(2));
+    
+    % init
+    Xinner = zeros(nTheta,2);
+    Yinner = zeros(nTheta,2);
+    Xouter = zeros(nTheta,2);
+    Youter = zeros(nTheta,2);
+    for idx_angle = 1:nTheta
+        X2 = 1:col;
+        X = [1 col];
+        Y = tan(theta(idx_angle))*(X-xc)+yc;
+        Y2 = tan(theta(idx_angle))*(X2-xc)+yc;
+        % find the intersection with the nuclear mask
+        [inXnu inYnu] = ext_lineinmask(nuMask{idx_cell},X,Y);
+%         [inX2nu inY2nu] = ext_lineinmask(nuMask{idx_cell},X2,Y2);
+        if theta(idx_angle)<pi/2
+            Xinner(idx_angle,1) = (inXnu(2));
+            Xinner(idx_angle,2) = (inXnu(end-1));
+            Yinner(idx_angle,1) = (inYnu(2));
+            Yinner(idx_angle,2) = (inYnu(end-1));
+%             fprintf('inXnu: %d %d  inYnu: %d %d\n', inXnu(2), inXnu(end-1), inYnu(2), inYnu(end-1));
+%             fprintf('inX2nu: %d %d  inY2nu: %d %d\n', inX2nu(2), inX2nu(end-1), inY2nu(2), inY2nu(end-1));
+% fractionaldelta1 = abs(inXnu(2)-inX2nu(2))/inX2nu(2);
+% fractionaldelta2 = abs(inXnu(end-1)-inX2nu(end-1))/inX2nu(end-1);
+% fractionaldelta3 = abs(inYnu(2)-inY2nu(2))/inY2nu(2);
+% fractionaldelta4 = abs(inYnu(end-1)-inY2nu(end-1))/inY2nu(end-1);
+% m12 = max(fractionaldelta1, fractionaldelta2);
+% m34 = max(fractionaldelta3, fractionaldelta4);
+% m1234 = max(m12, m34);
+% maxfractionaldelta = max(maxfractionaldelta, m1234);
+% fprintf('[%d]  delta inXnu: %d%%  %d%%   delta inYnu: %d%% %d%%\n', idx_angle, abs(inXnu(2)-inX2nu(2))/inX2nu(2), abs(inXnu(end-1)-inX2nu(end-1))/inX2nu(end-1), abs(inYnu(2)-inY2nu(2))/inY2nu(2), abs(inYnu(end-1)-inY2nu(end-1))/inY2nu(end-1));
+        else
+            Xinner(idx_angle,2) = (inXnu(2));
+            Xinner(idx_angle,1) = (inXnu(end-1));
+            Yinner(idx_angle,2) = (inYnu(2));
+            Yinner(idx_angle,1) = (inYnu(end-1));
+        end
+        
+        % find the intersection with the cytoplasm mask
+        [inXcy inYcy] = ext_lineinmask(cyMask{idx_cell},X,Y);
+        
+        if theta(idx_angle)<pi/2
+            
+            Xouter(idx_angle,1) = (inXcy(2));
+            Xouter(idx_angle,2) = (inXcy(end-1));
+            Youter(idx_angle,1) = (inYcy(2));
+            Youter(idx_angle,2) = (inYcy(end-1));
+        else
+            
+            Xouter(idx_angle,2) = (inXcy(2));
+            Xouter(idx_angle,1) = (inXcy(end-1));
+            Youter(idx_angle,2) = (inYcy(2));
+            Youter(idx_angle,1) = (inYcy(end-1));
+        end
+    end
+    
+    % round the intersection
+    Xinner = round(Xinner(:));
+    Yinner = round(Yinner(:));
+    Xouter = round(Xouter(:));
+    Youter = round(Youter(:));
+    
+    % get the mask band specified by rDiv+1 (number of radial divisions)
+    Xset = ext_ndlinspace(Xinner,Xouter,rDiv+1);
+    Yset = ext_ndlinspace(Yinner,Youter,rDiv+1);
+    masknu = poly2mask(Xset(:,1),Yset(:,1),row,col);
+    
+    mb = cell(numOfCell,rDiv);
+    mb{idx_cell,1} = poly2mask(Xset(:,2),Yset(:,2),row,col)-masknu;
+    for idx_band = 2:rDiv
+        temp = poly2mask(Xset(:,idx_band),Yset(:,idx_band),row,col);
+        mb{idx_cell,idx_band}= poly2mask(Xset(:,idx_band+1),Yset(:,idx_band+1),row,col)-temp;
+    end
+    
+    % get the average stain intensity in a band for every stain
+    intensityAvg = zeros(numOfStain,rDiv);
+    for idx_stain = set_stain
+        for idx_band = 1:rDiv
+            intensity = (mb{idx_cell,idx_band}).*(cyMask{idx_cell}).*(stainImage{idx_stain});
+            intensityAvg(idx_stain,idx_band) = mean2(intensity);
+        end
+    end
+    SIB.intensityavg{idx_cell} = intensityAvg;
+    
+    time = toc;
+    fprintf('Elapsed time is %3.1f seconds.\n\n',time)
+end
+%fprintf('maxfractionaldelta=%d\n', maxfractionaldelta);
+end
+

@@ -1,0 +1,12 @@
+
+#PBS -l nodes=1:ppn=1
+
+#PBS -l walltime=00:10:00
+
+#PBS -q serial
+
+
+
+module load matlab/2012b
+
+matlab -nodesktop -nosplash -r "addpath('/home/dtr2/MetricFiles/Metrics');frontend1('/home/dtr2/TestImages', '/home/dtr2/MetricFiles/Metrics/IndividualMetrics/A_ComputeCellSize.m', 'Testresults.csv'); exit"
