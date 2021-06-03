@@ -1,0 +1,9 @@
+.DS_Store
+Functions/MetricProgramFiles_OFFICIAL/Metrics/Masks
+Functions/MetricProgramFiles_OFFICIAL/TestData
+
+# OSX / *nix default autosave extension
+*.m~
+
+# Compiled MEX binaries (all platforms)
+*.mex*
