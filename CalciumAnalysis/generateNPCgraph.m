@@ -15,7 +15,6 @@ function [errorReport, cellinfo, framestop, bestsig1, bestsig2, badsig1, badsig2
 close all
 errorReport = [];
 
-
 %Segment median image, find ROI
 info = imfinfo(filename);
 framestop = round(numel(info)*(timestop/timetotal));

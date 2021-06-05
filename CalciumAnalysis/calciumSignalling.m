@@ -26,7 +26,7 @@ for i = 1:numel(d)
         fclose(fid);
         % ARUN EDIT - replace calcium_engine with something that calls
         % extractData2
-        errorReport = calcium_engine([inputDirName, filesep, fileName] , outputSubDirName);
+        errorReport = calciumEngine([inputDirName, filesep, fileName], outputSubDirName);
         if ~isempty(errorReport)
             statusArr(end+1) = errorReport;
         end
