@@ -9,25 +9,25 @@
 %        the maximum intensity projection image
 % Output: cellInfo - cell array containing time series data for all active
 %        cells (those displaying >3 transients)
-%        cellInfoAllCells - cell array containing time series data for all 
+%        cellInfoAllCells - cell array containing time series data for all
 %        cells
 %        mask - mask used for computation
 %        maxImage - maximum intensity projection image
 %        functionalAdjacencyMatrix - adjacency matrix specifying
 %        connections among ROIs based on time series correlations
 
-function [errorReport, cellInfo, cellInfoAllCells, mask, maxImage, functionalAdjacencyMatrix] = generateFunctionalGraph(filename, timetotal, timestop, varargin)
+function [errorReport, cellInfo, cellInfoAllCells, mask, maxImage, functionalAdjacencyMatrix] = generateFunctionalGraph(filename, mask)
 
 %% Setting up
 info = imfinfo(filename);
 maxImage = findMaxImage(filename); % extract maximum intensity projection image
 
-% if mask not provided as input, run default segmentation - NEED TO FIX
-if nargin < 4
+% if mask not provided as input, run default segmentation
+if nargin < 2
     mask = segmentWatershed(maxImage);
 end
 
-framestop = round(numel(info)*(timestop/timetotal));
+totalFrames = size(info, 1);
 mask = imresize(mask, [info(1).Height, info(1).Width]); % ensure mask and images are same dimensions
 CC = bwconncomp(mask);
 nCells = CC.NumObjects;
@@ -42,33 +42,32 @@ if nCells == 0
     return;
 end
 
-%% Gathering info on ROIs
-nActiveCells = CC.NumObjects;
-cellInfoAllCells = zeros(nActiveCells, 6, framestop);
+%% gathering information on ROIs
+nActiveCells = nCells; % initializing number of active cells to all cells
+cellInfoAllCells = struct;
+cellInfoAllCells.nCells = nCells;
 stats = regionprops(CC, 'Centroid');
 
-%% gathering (x, y) coordinates and cell index
-for k = 1:CC.NumObjects
+% centroid locations of all cells
+cellInfoAllCells.cellLocations = zeros(nCells, 2);
+for k = 1:nCells
     current = stats(k);
     location = current.Centroid;
-    cellInfoAllCells(k, 1, :) = location(1); % storing x location
-    cellInfoAllCells(k, 2, :) = location(2); % storing y location
-    cellInfoAllCells(k, 6, :) = k; % storing cell index
+    cellInfoAllCells.cellLocations(k, 1) = location(1); % storing x location
+    cellInfoAllCells.cellLocations(k, 2) = location(2); % storing y location
 end
 
-%% gathering time-varying intensity for each ROI
-parfor j=1:framestop
-    im = imread(filename, j);
-    % gather pixel intensities and area for each cell
-    stats = regionprops(CC, im, 'PixelValues', 'Area');
-    % store mean intensity in cellInfoAllCells
-    intensities = zeros(size(cellInfoAllCells(:,4,j)));
-    for k = 1:CC.NumObjects
+% time-varying intensity for each ROI
+cellInfoAllCells.F = zeros(totalFrames, nCells);
+for j = 1:totalFrames
+    currentFrame = imread(filename, j);
+    stats = regionprops(CC, currentFrame, 'PixelValues', 'Area');
+    intensitiesCurrentFrame = zeros(1, nCells);
+    parfor k = 1:nCells
         current = stats(k);
-        intensities(k) = sum(current.PixelValues) / current.Area;
+        intensitiesCurrentFrame(k) = sum(current.PixelValues)/current.Area;
     end
-    
-    cellInfoAllCells(:, 4, j) = intensities; % storing raw intensity
+    cellInfoAllCells.F(j, :) = intensitiesCurrentFrame;
 end
 
 fprintf('Data Extracted \n')
@@ -166,7 +165,7 @@ saveFile = outputFileName(filename, '_parameters.mat');
 save(saveFile, 'functionalAdjacencyMatrix', 'adjacencyMatrixAllCorrelations', 'CellDistances', 'cutoff', '-append');
 
 %% overlay mask on maxImage
-f = figure; 
+f = figure;
 %imshow(segmentOverlay(bw, maxImage));
 imshow(maxImage, 'Border', 'Tight'); hold on;
 MaskBoundaries = bwboundaries(mask);
@@ -182,7 +181,7 @@ saveas(f, strcat(outputFileName(filename, sprintf('-Masks')), '.png'));
 close(f);
 
 %% plot graph on maxImage
-f = figure; 
+f = figure;
 %imshow(segmentOverlay(bw, maxImage));
 imshow(maxImage); hold on;
 MaskBoundaries = bwboundaries(mask);
@@ -195,7 +194,7 @@ for k = 1:nActiveCells
     text(cellinfo(k,1,1), cellinfo(k,2,1), num2str(cellinfo(k, 6, 1)), 'color', 'w', 'FontSize', 6);
 end
 
-wgPlot(functionalAdjacencyMatrix, [cellinfo(:,1,1) cellinfo(:,2,1)], 'edgeColorMap', parula); 
+wgPlot(functionalAdjacencyMatrix, [cellinfo(:,1,1) cellinfo(:,2,1)], 'edgeColorMap', parula);
 saveas(f, strcat(outputFileName(filename, sprintf('-Graph')), '.png'));
 close(f);
 

@@ -1,4 +1,5 @@
 function statusArr = calciumSignalling(inputDirName, outputDirName, sourceCodePath)
+%addpath(genpath(sourceCodePath)); % add source code directory to path?
 addpath(genpath([sourceCodePath filesep 'Functions']));
 
 statusArr = repmat(makeErrorStruct('', ''), 0);
@@ -22,11 +23,9 @@ for i = 1:numel(d)
             error('[calciumSignalling] Unable to create directory %s', outputSubDirName);
         end
         fid = fopen([outputDirName, filesep, 'log.txt'], 'a');
-        fprintf(fid, '[calciumSignalling] Calling calcium_engine; fileName=%s\n', fileName);
+        fprintf(fid, '[calciumSignalling] Calling calciumEngine; fileName=%s\n', fileName);
         fclose(fid);
-        % ARUN EDIT - replace calcium_engine with something that calls
-        % extractData2
-        errorReport = calciumEngine([inputDirName, filesep, fileName], outputSubDirName);
+        errorReport = calciumEngine([inputDirName, filesep, fileName], outputSubDirName); % AM - calling calciumEngine; send optional mask here?
         if ~isempty(errorReport)
             statusArr(end+1) = errorReport;
         end

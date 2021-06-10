@@ -1,17 +1,14 @@
 function errorReport = calciumEngine(fileName, outputDirName)
 
 errorReport = [];
-timetotal = 15;
-timestop = 15;
 
-[errorReport, cellinfo, framestop, bestsig1, bestsig2, badsig1, badsig2, adj, corrs, ...
-    cutoff, ccov, bw, image, cellinfo_extended] = generateNPCgraph(fileName, timetotal, timestop);
+[errorReport, cellInfo, cellInfoAllCells, mask, maxImage, functionalAdjacencyMatrix] = generateFunctionalGraph(filename);
 
 if ~isempty(errorReport)
     return;
 end
 
-if size(cellinfo, 1) == 0
+if size(cellInfo, 1) == 0
     fn = getFileName(fileName);
     errorReport = makeErrorStruct(['no active cells found in file ', fn], 1);
     return;
@@ -19,7 +16,7 @@ end
 
 generatePlots;
 
-errorReport = writeGraphProperties(outputDirName, adj, bw, fileName);
+errorReport = writeGraphProperties(outputDirName, functionalAdjacencyMatrix, mask, fileName);
 
 % create spatial graph
 adjacencyType = 1;
