@@ -19,13 +19,14 @@
 function [errorReport, cellInfo, cellInfoAllCells, mask, maxImage, functionalAdjacencyMatrix] = generateFunctionalGraph(filename, mask)
 
 %% Setting up
+nSpikesThreshold = 2;
 info = imfinfo(filename);
 maxImage = findMaxImage(filename); % extract maximum intensity projection image
 
 % if mask not provided as input, run default segmentation
-if nargin < 2
+%if nargin < 2
     mask = segmentWatershed(maxImage);
-end
+%end
 
 totalFrames = size(info, 1);
 mask = imresize(mask, [info(1).Height, info(1).Width]); % ensure mask and images are same dimensions
@@ -57,8 +58,8 @@ for k = 1:nCells
     cellInfoAllCells.cellLocations(k, 2) = location(2); % storing y location
 end
 
-% time-varying intensity for each ROI
-cellInfoAllCells.F = zeros(totalFrames, nCells);
+% store unprocessed time-varying intensity for each ROI
+cellInfoAllCells.Fraw = zeros(totalFrames, nCells);
 for j = 1:totalFrames
     currentFrame = imread(filename, j);
     stats = regionprops(CC, currentFrame, 'PixelValues', 'Area');
@@ -67,75 +68,66 @@ for j = 1:totalFrames
         current = stats(k);
         intensitiesCurrentFrame(k) = sum(current.PixelValues)/current.Area;
     end
-    cellInfoAllCells.F(j, :) = intensitiesCurrentFrame;
+    cellInfoAllCells.Fraw(j, :) = intensitiesCurrentFrame;
 end
 
 fprintf('Data Extracted \n')
 
 %% Process data: calculate F-F0/F0
-for j = 1:nActiveCells
+
+cellInfoAllCells.Fprocessed = zeros(totalFrames, nCells);
+cellInfoAllCells.F0 = zeros(totalFrames, nCells);
+Fraw = cellInfoAllCells.Fraw;
+
+for j = 1:nCells % loop over all cells
+    currentF = Fraw(:, j);
+    
     % subtract linear trend from mean intensity data
-    cellInfoAllCells(j,3,:) = detrend(squeeze(cellInfoAllCells(j,4,:))) + cellInfoAllCells(j,4,1);
+    currentF = detrend(currentF) + currentF(1);
     
     % create moving baseline vector
-    F = squeeze(cellInfoAllCells(j,4,:));
-    window = round(length(F)/100); % moving window is a hundredth of total time
-    F = smooth(F, window); % smooth time-varying intensity trace
-    F0 = zeros(size(F));
-    for k = 1:length(F)
+    window = round(totalFrames/100); % moving window is a hundredth of total time
+    currentF = smooth(currentF, window); % smooth time-varying intensity trace
+    F0 = zeros(size(currentF));
+    parfor k = 1:totalFrames
         if k <= window
-            F0(k) = prctile(F(1:k+window), 8);
-        elseif k >= length(F) - window
-            F0(k) = prctile(F(k-window:length(F)), 8);
+            F0(k) = prctile(currentF(1:k+window), 8);
+        elseif k >= length(currentF) - window
+            F0(k) = prctile(currentF(k-window:length(currentF)), 8);
         else
-            F0(k) = prctile(F(k-window:k+window), 8);
+            F0(k) = prctile(currentF(k-window:k+window), 8);
         end
     end
     
-    % subtract baseline from intensity, then divide by baseline
-    cellInfoAllCells(j,3,:) = (squeeze(cellInfoAllCells(j,4,:))-F0)./F0;
-    
+    cellInfoAllCells.F0(:, j) = F0; % store baseline intensity
+    cellInfoAllCells.Fprocessed(:, j) = (currentF - F0)./F0; % calculate delta F / F and store as Fprocessed
 end
 
 fprintf('Data Processed \n')
-cellInfo = cellInfoAllCells; % cellinfo will contain only info for active cells
 
 %% Filter out inactive cells to avoid false positives and measure activity
-delete = pi*ones(size(cellInfo(1,3,:))); %marker vector
-n = nActiveCells;
-for j = 1:n
-    signal = smooth(squeeze(cellInfo(j, 3, :)));
+cellInfoAllCells.activeCells = zeros(1, nCells); % marker vector for active cells
+cellInfoAllCells.nSpikes = zeros(1, nCells); % storing number of spikes for each cell
+for j = 1:nCells
+    currentSignal = cellInfoAllCells.Fprocessed(:, j);
+    
     % A spike is a peak whose deltaF/F value is at least 0.25 of the max value in the signal, or 0.05, whichever is higher
-    [spikes, ~] = findpeaks(signal, 'MinPeakHeight', max(0.25*max(signal), 0.05));
+    [spikes, ~] = findpeaks(currentSignal, 'MinPeakHeight', max(0.25*max(currentSignal), 0.05));
     
-    cellInfo(j, 5, :) = numel(spikes); % storing number of spikes
-    cellInfoAllCells(j, 5, :) = numel(spikes); % storing number of spikes
+    cellInfoAllCells.nSpikes(j) = numel(spikes); % storing number of spikes
     
-    if length(spikes) < 3
-        cellInfo(j,3,:) = delete;
-        nActiveCells = nActiveCells - 1;
-        continue;
-    end
-    
-end
-
-% Delete data from inactive cells in cellinfo (but preserved in cellinfo_allCells)
-j = 1;
-while size(cellInfo,1) > nActiveCells
-    if cellInfo(j,3,:) == delete
-        cellInfo(j,:,:) = [];
-    else
-        j = j + 1;
+    % setting marker vector to 1 if number of spikes exceeds threshold
+    if numel(spikes) > nSpikesThreshold
+        cellInfoAllCells.activeCells(j) = 1;
     end
 end
-fprintf('Inactive Cells Removed \n')
 
+%% Generate adjacency matrix based on cross-correlation of pixel intensities, only for active cells
 maxLag = 0; % setting maximum value of lag allowed for calculating correlations
 addpath(genpath('/Users/arunmahadevan/Documents/MATLAB/wgPlot'));
 loadFile = strrep(filename, '.tif', '_parameters.mat');
 load(loadFile, 'cellinfo', 'maxImage', 'mask');
 
-%% Generate adjacency matrix based on cross-correlation of pixel intensities, only for active cells
 nActiveCells = size(cellinfo, 1);
 adjacencyMatrixAllCorrelations = zeros(nActiveCells, nActiveCells);
 cutoff = generateCutoff(cellinfo, 99, maxLag); % using 99th percentile of scrambled data to generate cutoff
