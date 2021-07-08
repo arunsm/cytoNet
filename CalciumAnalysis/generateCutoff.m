@@ -1,6 +1,12 @@
-% Generates a cuttoff correlation value by scrambling each data set, finding
-% all correlation coefficients, and then using the 99th percentile of the
+% Function to generate a cuttoff correlation value by scrambling each data set, 
+% finding all correlation coefficients, and then using the a percentile of the
 % set of coefficients as the cutoff value
+% INPUT: timeSeries - (nxm) matrix where n is the number of cells and m is
+% the number of time points; cutoffPercentile - percentile of scrambled
+% correlation coefficients to use as cutoff; M - maximum lag over which to
+% calculate cross-correlation values (if M is 0, this becomes the Pearson
+% correlation)
+
 function cutoff = generateCutoff(timeSeries, cutoffPercentile, M)
 scrambledTimeSeries = timeSeries;
 s = size(scrambledTimeSeries);

@@ -1,3 +1,14 @@
+% script calling functions to generate functional graph, generate
+% functional network plots, compute graph-based metrics, and write metrics
+% to file
+% INPUT: filePath - directory path to input file, assumed to be a stacked
+% .tif file containing calcium imaging data; outputDirName - directory path
+% to folder for output
+% DEPENDENCIES: 
+% Mike Wu (2021). wgPlot - Weighted Graph Plot (a better version of gplot) 
+% https://www.mathworks.com/matlabcentral/fileexchange/24035-wgplot-weighted-graph-plot-a-better-version-of-gplot
+% MATLAB Central File Exchange
+
 function errorReport = calciumEngine(filePath, outputDirName)
 
 fileName = getFileName(filePath);    
@@ -33,12 +44,6 @@ end
 WriteNetworkMetrics(outputDirName, AdjacencyMatrices, ...
     GlobalMetrics, GlobalMetricNames, LocalMetrics, LocalMetricNames, '_fun');
 
-% create spatial graph
-adjacencyType = 1;
-threshold = 1.5;
-
-if isempty(errorReport)
-    spatialGraph(outputDirName, bw, threshold, adjacencyType);
-end
+% create spatial graph (??)
 
 end

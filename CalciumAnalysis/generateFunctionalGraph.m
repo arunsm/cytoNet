@@ -1,20 +1,13 @@
 % Function to extract calcium time series data from an image stack and
 % compute a functional graph based on correlations among time series
 %
-% Input: filename - stacked tif image file you wish to generate a graph for
-%        timetotal - total timeframe image set covers
-%        timestop - timepoint you wish to stop reading in data
-%        mask (optional) - mask defining ROIs for time series extraction;
-%        if no mask is provided, the default segmentation program is run on
-%        the maximum intensity projection image
-% Output: cellInfo - cell array containing time series data for all active
-%        cells (those displaying >3 transients)
-%        cellInfoAllCells - cell array containing time series data for all
-%        cells
-%        mask - mask used for computation
-%        maxImage - maximum intensity projection image
-%        functionalAdjacencyMatrix - adjacency matrix specifying
-%        connections among ROIs based on time series correlations
+% INPUT: filePath - stacked tif image file you wish to generate a graph for; 
+% mask (optional) - binary mask defining ROIs for time series extraction; 
+% if no mask is provided, the default segmentation program is run on 
+% the maximum intensity projection image
+%
+% OUTPUT: cellInfoAllCells - MATLAB structure containing calcium image
+% analysis parameters
 
 function [errorReport, cellInfoAllCells] = generateFunctionalGraph(filePath, mask)
 

@@ -9,7 +9,7 @@ function [hE,hV]=wgPlot(adjMat,coord,varargin)
 %     [coord] = N x 2 matrix of vertex coordinates of the graph to be plotted.
 %  [varargin] = are specified as parameter value pairs where the parameters are
 %     'edgeColorMap' = m1 x 3 edge colormap for coloring edges by their 
-%                      weight, {default=jet}
+%                      weight, {default=cool}
 %        'edgeWidth' = scalar specifying the width of the edges. {default=0.1}
 %     'vertexMarker' = single char, can be {.ox+*sdv^<>ph} as in plot {default='.'}
 %   'vertexColorMap' = m2 x 3 vertex color map for coloring vertices by their
@@ -37,7 +37,7 @@ axesArea(h,[6 7 5 5]);
 plotParm={'markerSize',6,'lineWidth',0.1,'marker','.','MarkerEdgeColor',[1,0.5,0.2]};
 siz=size(adjMat);
 vrtxSiz=100;
-edgeMap=jet;
+edgeMap=cool;
 vrtxMap=summer;
 
 

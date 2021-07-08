@@ -47,12 +47,12 @@ while numel(s) < len
     s = ['0', s];
 end
 end
-	
+
 
 function status = validateImageFile(inputDirName, fileName)
 status = [];
 filePath = [inputDirName, filesep, fileName];
-try 
+try
     info = imfinfo(filePath);
 catch e
     status = makeErrorStruct(sprintf('%s is not a readable image file', fileName), 2);
