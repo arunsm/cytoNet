@@ -16,17 +16,22 @@
 %        functionalAdjacencyMatrix - adjacency matrix specifying
 %        connections among ROIs based on time series correlations
 
-function [errorReport, cellInfo, cellInfoAllCells, mask, maxImage, functionalAdjacencyMatrix] = generateFunctionalGraph(filename, mask)
+function [errorReport, cellInfoAllCells] = generateFunctionalGraph(filePath, mask)
+
+errorReport = [];
 
 %% Setting up
-nSpikesThreshold = 2;
-info = imfinfo(filename);
-maxImage = findMaxImage(filename); % extract maximum intensity projection image
+nSpikesThreshold = 2; % minimum number of spikes to determine an active cell
+cutoffPercentile = 99; % percentile of scrambled correlations to be used for cutoff
+maxLag = 0; %  maximum value of lag allowed for calculating correlations
+
+info = imfinfo(filePath);
+maxImage = findMaxImage(filePath); % extract maximum intensity projection image
 
 % if mask not provided as input, run default segmentation
-%if nargin < 2
+if nargin < 2
     mask = segmentWatershed(maxImage);
-%end
+end
 
 totalFrames = size(info, 1);
 mask = imresize(mask, [info(1).Height, info(1).Width]); % ensure mask and images are same dimensions
@@ -34,19 +39,21 @@ CC = bwconncomp(mask);
 nCells = CC.NumObjects;
 
 if nCells == 0
-    fn = getFileName(filename);
+    fn = getFileName(filePath);
     errorReport = makeErrorStruct(['no cells found in file ', fn], 1);
     cellInfo = [];
     cellInfoAllCells = [];
     maxImage = [];
-    functionalAdjacencyMatrix = [];
+    A = [];
     return;
 end
 
 %% gathering information on ROIs
-nActiveCells = nCells; % initializing number of active cells to all cells
 cellInfoAllCells = struct;
+cellInfoAllCells.mask = mask;
+cellInfoAllCells.maxImage = maxImage;
 cellInfoAllCells.nCells = nCells;
+
 stats = regionprops(CC, 'Centroid');
 
 % centroid locations of all cells
@@ -61,7 +68,7 @@ end
 % store unprocessed time-varying intensity for each ROI
 cellInfoAllCells.Fraw = zeros(totalFrames, nCells);
 for j = 1:totalFrames
-    currentFrame = imread(filename, j);
+    currentFrame = imread(filePath, j);
     stats = regionprops(CC, currentFrame, 'PixelValues', 'Area');
     intensitiesCurrentFrame = zeros(1, nCells);
     parfor k = 1:nCells
@@ -71,7 +78,7 @@ for j = 1:totalFrames
     cellInfoAllCells.Fraw(j, :) = intensitiesCurrentFrame;
 end
 
-fprintf('Data Extracted \n')
+fprintf('Data extracted \n')
 
 %% Process data: calculate F-F0/F0
 
@@ -103,7 +110,7 @@ for j = 1:nCells % loop over all cells
     cellInfoAllCells.Fprocessed(:, j) = (currentF - F0)./F0; % calculate delta F / F and store as Fprocessed
 end
 
-fprintf('Data Processed \n')
+fprintf('Data processed \n')
 
 %% Filter out inactive cells to avoid false positives and measure activity
 cellInfoAllCells.activeCells = zeros(1, nCells); % marker vector for active cells
@@ -123,121 +130,32 @@ for j = 1:nCells
 end
 
 %% Generate adjacency matrix based on cross-correlation of pixel intensities, only for active cells
-maxLag = 0; % setting maximum value of lag allowed for calculating correlations
-addpath(genpath('/Users/arunmahadevan/Documents/MATLAB/wgPlot'));
-loadFile = strrep(filename, '.tif', '_parameters.mat');
-load(loadFile, 'cellinfo', 'maxImage', 'mask');
+nActiveCells = sum(cellInfoAllCells.activeCells);
+A = zeros(nActiveCells, nActiveCells);
+timeSeries = cellInfoAllCells.Fprocessed;
 
-nActiveCells = size(cellinfo, 1);
-adjacencyMatrixAllCorrelations = zeros(nActiveCells, nActiveCells);
-cutoff = generateCutoff(cellinfo, 99, maxLag); % using 99th percentile of scrambled data to generate cutoff
-fprintf('Cutoff Generated\n')
+cutoff = generateCutoff(timeSeries, cutoffPercentile, maxLag); % calculate cutoff using scrambled data
+cellInfoAllCells.cutoffCorrelation = cutoff;
+fprintf('Cutoff generated \n')
 
 for j = 1:nActiveCells
-    correlations = zeros(length(adjacencyMatrixAllCorrelations), 1);
+    correlations = zeros(length(A), 1);
+    timeSeries1 = timeSeries(:, j);
     parfor k = j:nActiveCells
-        current = max(xcov(squeeze(cellinfo(j,3,:)), squeeze(cellinfo(k,3,:)), maxLag, 'coeff'));
-        if j == k
-            current = 0;
-        end
-        correlations(k) = current;
+        timeSeries2 = timeSeries(:, k);
+        if j ~= k
+            correlations(k) = max(xcov(timeSeries1, timeSeries2, maxLag, 'coeff'));
+        end    
     end
-    adjacencyMatrixAllCorrelations(j,:) = correlations;
+    A(j, :) = correlations;
 end
+functionalAdjacencyMatrixWeighted = A' + A;
+functionalAdjacencyMatrixWeighted(1:nActiveCells+1:end) = diag(A);
 
-functionalAdjacencyMatrix = adjacencyMatrixAllCorrelations;
-functionalAdjacencyMatrix(adjacencyMatrixAllCorrelations < cutoff) = 0; % remove indices lower than cutoff
-fprintf('Adjacency Matrix Created \n')
-
-%% compute distance between all cell pairs
-CellLocations = [squeeze(cellinfo(:, 1, 1)) squeeze(cellinfo(:, 2, 1))]; % using first frame to compute cell distances
-CellDistances = squareform(pdist(CellLocations, 'Euclidean'));
-
-saveFile = outputFileName(filename, '_parameters.mat');
-save(saveFile, 'functionalAdjacencyMatrix', 'adjacencyMatrixAllCorrelations', 'CellDistances', 'cutoff', '-append');
-
-%% overlay mask on maxImage
-f = figure;
-%imshow(segmentOverlay(bw, maxImage));
-imshow(maxImage, 'Border', 'Tight'); hold on;
-MaskBoundaries = bwboundaries(mask);
-for k = 1:length(MaskBoundaries)
-    boundary_i = MaskBoundaries{k};
-    plot(boundary_i(:, 2), boundary_i(:, 1), 'r');
-end
-
-for k = 1:nActiveCells
-    text(cellinfo(k,1,1), cellinfo(k,2,1), num2str(cellinfo(k, 6, 1)), 'color', 'w', 'FontSize', 10);
-end
-saveas(f, strcat(outputFileName(filename, sprintf('-Masks')), '.png'));
-close(f);
-
-%% plot graph on maxImage
-f = figure;
-%imshow(segmentOverlay(bw, maxImage));
-imshow(maxImage); hold on;
-MaskBoundaries = bwboundaries(mask);
-for k = 1:length(MaskBoundaries)
-    boundary_i = MaskBoundaries{k};
-    plot(boundary_i(:, 2), boundary_i(:, 1), 'r');
-end
-
-for k = 1:nActiveCells
-    text(cellinfo(k,1,1), cellinfo(k,2,1), num2str(cellinfo(k, 6, 1)), 'color', 'w', 'FontSize', 6);
-end
-
-wgPlot(functionalAdjacencyMatrix, [cellinfo(:,1,1) cellinfo(:,2,1)], 'edgeColorMap', parula);
-saveas(f, strcat(outputFileName(filename, sprintf('-Graph')), '.png'));
-close(f);
-
-%% plot graph on immunostain image
-if exist(ImmunostainingFileNames{1}, 'file'); blue = imread(ImmunostainingFileNames{1}); else; blue = zeros(size(maxImage)); end
-if exist(ImmunostainingFileNames{3}, 'file'); red = imread(ImmunostainingFileNames{3}); else; red = zeros(size(maxImage)); end
-if exist(ImmunostainingFileNames{2}, 'file'); green = imread(ImmunostainingFileNames{2}); else; green = zeros(size(maxImage)); end
-ImmunostainImage = cat(3, 2*red, zeros(size(green)), blue);
-
-info = imfinfo(filename);
-ImmunostainImage = imresize(ImmunostainImage, [info(1).Height, info(1).Width]);
-
-f = figure; set(gcf, 'Color', 'w');
-imshow(ImmunostainImage, 'Border', 'Tight');
-hold on;
-MaskBoundaries = bwboundaries(mask);
-hold on;
-for k = 1:length(MaskBoundaries)
-    boundary_i = MaskBoundaries{k};
-    plot(boundary_i(:, 2), boundary_i(:, 1), 'w');
-end
-%set(findall(gcf,'type','line'), 'LineWidth', 2);
-
-for k = 1:nActiveCells
-    text(cellinfo(k,1,1), cellinfo(k,2,1), num2str(cellinfo(k, 6, 1)), 'color', 'w', 'FontSize', 6);
-end
-
-wgPlot(functionalAdjacencyMatrix, [cellinfo(:,1,1) cellinfo(:,2,1)], 'edgeColorMap', parula);
-saveas(f, strcat(outputFileName(filename, sprintf('-ImmunostainGraph')), '.png'));
-close(f);
-
-%% plotting distance v correlation
-AvgeDistanceConnectedCells = mean(CellDistances(functionalAdjacencyMatrix~=0));
-f = figure;
-set(gcf, 'Color', 'w');
-if ~isempty(CellDistances)
-    plot(CellDistances, adjacencyMatrixAllCorrelations, 'k.', 'MarkerSize', 16);
-end
-
-if isnan(cutoff)
-    cutoff = 0;
-end
-
-%set(gca, 'YLim', [cutoff 1]);
-title(sprintf('Average Distance between connected cells = %4.3f pixels', AvgeDistanceConnectedCells));
-r = refline(0,cutoff);
-r.Color = 'r';
-legend(sprintf('Cutoff = %4.3f', cutoff));
-xlabel('Distance (pixels)');
-ylabel('Correlation Coefficient');
-%set(gca, 'FontSize', 30);
-saveas(f, strcat(outputFileName(filename, sprintf('-DistanceCorrelation')), '.png'));
-close(f);
+% create binary adjacency matrix
+functionalAdjacencyMatrixBinary = ones(size(functionalAdjacencyMatrixWeighted));
+functionalAdjacencyMatrixBinary(functionalAdjacencyMatrixWeighted < cutoff) = 0;
+cellInfoAllCells.functionalAdjacencyMatrixBinary = functionalAdjacencyMatrixBinary;
+cellInfoAllCells.functionalAdjacencyMatrixWeighted = functionalAdjacencyMatrixWeighted;
+fprintf('Adjacency Matrix created \n')
 end

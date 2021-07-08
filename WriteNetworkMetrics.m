@@ -1,3 +1,13 @@
+% Function to write network metrics to file
+% INPUT: OutputPath - directory path for output
+% AdjacencyMatrices, GlobalMetrics, LocalMetrics - {nx2} cell arrays 
+% where n is the number of images and the second column contains the
+% adjacency matrix, global metrics array, and local metrics array for
+% corresponding image
+% GlobalMetricNames, LocalMetricNames - cell arrays containing names of
+% metrics
+% graphTypeTag - string containing type of graph - 'spa' for spatial, 'fun'
+% for functional
 
 function [] = WriteNetworkMetrics(OutputPath, AdjacencyMatrices, GlobalMetrics, GlobalMetricNames, LocalMetrics, LocalMetricNames, graphTypeTag)
 
@@ -11,14 +21,12 @@ nImages = size(GlobalMetrics, 1);
 
 %% Print Global Metrics
 
-% opening file for writing global metrics
+% open file for writing global metrics
 WritePath = strcat(OutputPath, filesep, 'GlobalMetrics', graphTypeTag, '.csv');
-
 fid = fopen(WritePath, 'w');
 
-% printing metric names
+% print metric names
 fprintf(fid, ',');
-
 for i = 1:nGlobalMetrics
     fprintf(fid, '%s,', GlobalMetricNames{i});
 end
@@ -26,7 +34,7 @@ end
 fprintf(fid, '\n');
 formatSpec = '%f,';
 
-% printing image names and metrics
+% print image names and metrics
 for i = 1:nImages
     currentMaskName = GlobalMetrics{i, 1};
     GlobalMetricsCurrent = GlobalMetrics{i, 2};

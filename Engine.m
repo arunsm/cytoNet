@@ -32,8 +32,8 @@ if segmentationRequested
     ctr = 1;
     for i = 1:nImages
         currentImageFile = strcat(InputPath, filesep, fnmeImages{i});
-
-writeLog(sprintf('[Engine] Segmenting %s', currentImageFile));
+        
+        writeLog(sprintf('[Engine] Segmenting %s', currentImageFile));
         
         % making sure currentImageFile is a readable image file
         try
@@ -47,9 +47,9 @@ writeLog(sprintf('[Engine] Segmenting %s', currentImageFile));
         % segmentation
         nLayers = numel(info); % total number of layers in image
         for k = 1:numel(segmentationLayerNumber)
-
-writeLog(sprintf('[Engine] Getting image number %d', k));
-
+            
+            writeLog(sprintf('[Engine] Getting image number %d', k));
+            
             if nLayers == 1 || all(segmentationLayerNumber == 1) % nLayers will be 1 if image is a non-layered image
                 CurrentImage = imread(currentImageFile);
                 layerSuffix = '';
@@ -67,13 +67,13 @@ writeLog(sprintf('[Engine] Getting image number %d', k));
                 CurrentImage = imread(currentImageFile, segmentationLayerNumber(k));
                 layerSuffix = strcat('-layer', num2str(k));
             end
-
+            
             % if image is RGB, converting to grayscale
             if size(CurrentImage, 3) >= 3
                 CurrentImage = rgb2gray(CurrentImage(:, :, 1:3));
                 errorReport(end+1) = makeErrorStruct(['file ', fnmeImages{i}, ' is an RGB image: converting to grayscale'], 1);
-            else 
-            % Check for unusual situation of a two channel image
+            else
+                % Check for unusual situation of a two channel image
                 if size(CurrentImage, 3) == 2
                     CurrentImage = CurrentImage(:, :, 1);
                     errorReport(end+1) = makeErrorStruct(['file ', fnmeImages{i}, ' has only two channels; using only the first channel'], 1);
@@ -108,9 +108,9 @@ writeLog(sprintf('[Engine] Getting image number %d', k));
             end
             
             % writing mask files to mask folder
-
-writeLog('[Engine] Writing mask file');
-
+            
+            writeLog('[Engine] Writing mask file');
+            
             MaskFileName = strcat(MaskInputPath, filesep, currentImageBaseName, layerSuffix, '-MASKS.tif');
             imwrite(Masks, MaskFileName);
             
@@ -126,9 +126,9 @@ else
 end
 
 if Mask2GraphRequested
-
-writeLog('[Engine] Calling Mask2Graph');
-
+    
+    writeLog('[Engine] Calling Mask2Graph');
+    
     
     % call Mask2Graph to convert mask info to graph output
     [errorReport, imageProcessingParams] = Mask2Graph(MaskInputPath, OutputPath, thresholdType, threshold, maskLayerNumber, errorReport);
