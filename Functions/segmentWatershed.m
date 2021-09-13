@@ -8,8 +8,8 @@ Masks = imclearborder(Masks);
 % performing median filtering to eliminate salt and pepper noise
 Masks = medfilt2(Masks, [5 5]);
 
-% eliminating objects under 50 pixels
-Masks = bwareaopen(Masks, 50);
+% eliminating objects under 100 pixels
+Masks = bwareaopen(Masks, 100);
 Masks = imfill(Masks, 'holes');
 
 % watershed seed generation using regional minima in distance transform

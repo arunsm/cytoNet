@@ -27,7 +27,7 @@ end
 xlabel('Distance (pixels)');
 ylabel('Functional Edge Strength');
 set(gca, 'FontSize', 20);
-savePath = strcat(outputDirName, filesep, fileNameBase, '-DistanceCorrelation.png');
+savePath = strcat(outputDirName, filesep, fileNameBase, '-DistanceCorrelation.svg');
 saveas(f, savePath);
 close(f);
 
@@ -42,21 +42,28 @@ for k = 1:length(maskBoundaries)
 end
 
 for k = 1:cellInfoAllCells.nCells
-    text(cellInfoAllCells.cellLocations(k, 1), cellInfoAllCells.cellLocations(k, 2), num2str(k), 'color', 'r', 'FontSize', 6);
+    text(cellInfoAllCells.cellLocations(k, 1), cellInfoAllCells.cellLocations(k, 2), num2str(k), 'color', 'r', 'FontSize', 8);
 end
 
 A = cellInfoAllCells.functionalAdjacencyMatrixWeighted;
 A(cellInfoAllCells.functionalAdjacencyMatrixWeighted < cellInfoAllCells.cutoffCorrelation) = 0;
 wgPlot(A, cellInfoAllCells.cellLocations(find(cellInfoAllCells.activeCells), :), ...
     'edgeColorMap', parula);
-savePath = strcat(outputDirName, filesep, fileNameBase, '-FunctionalGraph.png');
+set(findall(gcf,'type','line'), 'LineWidth', 1);
+savePath = strcat(outputDirName, filesep, fileNameBase, '-FunctionalGraph.svg');
 saveas(f, savePath);
 close(f);
 
 %% heatmap of number of spikes overlaid on mask
 
 f = plotMetricOnImage(cellInfoAllCells.cellLocations, cellInfoAllCells.mask, cellInfoAllCells.nSpikes);
-savePath = strcat(outputDirName, filesep, fileNameBase, '-NumberSpikes.png');
+hold on;
+
+for k = 1:cellInfoAllCells.nCells
+    text(cellInfoAllCells.cellLocations(k, 1), cellInfoAllCells.cellLocations(k, 2), num2str(k), 'color', 'k', 'FontSize', 8);
+end
+
+savePath = strcat(outputDirName, filesep, fileNameBase, '-NumberSpikes.svg');
 saveas(f, savePath);
 close(f);
 

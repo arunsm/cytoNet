@@ -1,3 +1,7 @@
+% inputDirName to have two sub-directories - MASKS and IMAGES; each will
+% have matching file base names to indicate corresponding image and mask
+% combinations
+
 function statusArr = calciumSignalling(inputDirName, outputDirName, sourceCodePath)
 %addpath(genpath(sourceCodePath)); % add source code directory to path?
 addpath(genpath([sourceCodePath filesep 'Functions']));
@@ -25,7 +29,7 @@ for i = 1:numel(d)
         fid = fopen([outputDirName, filesep, 'log.txt'], 'a');
         fprintf(fid, '[calciumSignalling] Calling calciumEngine; fileName=%s\n', fileName);
         fclose(fid);
-        errorReport = calciumEngine([inputDirName, filesep, fileName], outputSubDirName); % AM - calling calciumEngine; send optional mask here?
+        errorReport = calciumEngine([inputDirName, filesep, fileName], outputSubDirName, optionalMask); % AM - calling calciumEngine; send optional mask here?
         if ~isempty(errorReport)
             statusArr(end+1) = errorReport;
         end

@@ -1,12 +1,12 @@
-function Mask2GraphStruct = createMask2GraphStruct(Mask2GraphRequested, thresholdType, threshold, maskLayerNumber)
+function Mask2GraphStruct = createMask2GraphStruct(Mask2GraphRequested, adjacencyType, threshold, maskLayerNumber)
    
     % boolean value indicating whether graph implementation is required
     Mask2GraphStruct.Mask2GraphRequested = Mask2GraphRequested; 
 
     % numeric indicator for type of threshold used to build graph
-    % 1 = centroid-centroid distance
-    % 2 = shared border pixels
-    Mask2GraphStruct.thresholdType = thresholdType;
+    % 1 = shared border pixels
+    % 2 = centroid-centroid distance
+    Mask2GraphStruct.adjacencyType = adjacencyType;
     
     % threshold value for determining adjacency between objects
     Mask2GraphStruct.threshold = threshold;

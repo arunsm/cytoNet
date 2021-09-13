@@ -1,86 +1,64 @@
 % Function to write network metrics to file
-% INPUT: OutputPath - directory path for output
-% AdjacencyMatrices, GlobalMetrics, LocalMetrics - {nx2} cell arrays 
-% where n is the number of images and the second column contains the
-% adjacency matrix, global metrics array, and local metrics array for
-% corresponding image
-% GlobalMetricNames, LocalMetricNames - cell arrays containing names of
-% metrics
-% graphTypeTag - string containing type of graph - 'spa' for spatial, 'fun'
-% for functional
+% INPUT: outputPath - directory path for output, cellInfoAllCells - MATLAB
+% structure containing local and global metrics, metric names, adjacency
+% matrices, and graph type tag ('spatial' or 'functional') for each image
 
-function [] = WriteNetworkMetrics(OutputPath, AdjacencyMatrices, GlobalMetrics, GlobalMetricNames, LocalMetrics, LocalMetricNames, graphTypeTag)
+function [] = writeNetworkMetrics(outputPath, cellInfoAllCells)
 
-if nargin < 7
-    graphTypeTag = '_spa';
-end
+globalMetrics = cellInfoAllCells.globalMetrics;
+globalMetricNames = cellInfoAllCells.globalMetricNames;
+localMetrics = cellInfoAllCells.localMetrics;
+localMetricNames = cellInfoAllCells.localMetricNames;
+globalMetricsRandom = cellInfoAllCells.globalMetricsRandom;
+adjacencyMatrixBinary = cellInfoAllCells.adjacencyMatrixBinary;
 
-nGlobalMetrics = numel(GlobalMetricNames);
-nLocalMetrics = numel(LocalMetricNames);
-nImages = size(GlobalMetrics, 1);
+nGlobalMetrics = numel(globalMetricNames);
+nLocalMetrics = numel(localMetricNames);
 
-%% Print Global Metrics
+fileName = cellInfoAllCells.fileName;
+graphTypeTag = cellInfoAllCells.graphTypeTag;
 
-% open file for writing global metrics
-WritePath = strcat(OutputPath, filesep, 'GlobalMetrics', graphTypeTag, '.csv');
-fid = fopen(WritePath, 'w');
+%% print global metrics
+writePath = strcat(outputPath, filesep, fileName, '-GlobalMetrics-', graphTypeTag, '.csv');
+fid = fopen(writePath, 'w');
 
-% print metric names
-fprintf(fid, ',');
 for i = 1:nGlobalMetrics
-    fprintf(fid, '%s,', GlobalMetricNames{i});
+    fprintf(fid, '%s,', globalMetricNames{i});
 end
-
 fprintf(fid, '\n');
-formatSpec = '%f,';
 
-% print image names and metrics
-for i = 1:nImages
-    currentMaskName = GlobalMetrics{i, 1};
-    GlobalMetricsCurrent = GlobalMetrics{i, 2};
-    imageName = sprintf('%s', currentMaskName);
-    fprintf(fid, '%s,', imageName);
-    fprintf(fid, formatSpec, GlobalMetricsCurrent(:));
-    fprintf(fid, '\n');
-end
-
+writematrix(globalMetrics, writePath, 'WriteMode', 'append');
 fclose(fid);
 
-%% Print Local Metrics
+%% print random graph metrics
+writePath = strcat(outputPath, filesep, fileName, '-GlobalMetricsRandom-', graphTypeTag, '.csv');
+fid = fopen(writePath, 'w');
 
-for k = 1:nImages
-    
-    currentMaskName = LocalMetrics{k, 1};
-    
-    % opening file for writing local metrics
-    WritePath = strcat(OutputPath, filesep, 'LocalMetrics_', currentMaskName, graphTypeTag, '.csv');
-    fid = fopen(WritePath, 'w');
-    
-    % printing metric names
-    for i = 1:nLocalMetrics
-        fprintf(fid, '%s,', LocalMetricNames{i});
-    end
-    
-    fprintf(fid, '\n');
-    formatSpec = '%f,';
-    
-    % printing image names and metrics
-    LocalMetricsCurrent = LocalMetrics{k, 2};
-    for i = 1:size(LocalMetricsCurrent, 1)
-        fprintf(fid, formatSpec, LocalMetricsCurrent(i, :));
-        fprintf(fid, '\n');
-    end
-    
-    fclose(fid);
+for i = 1:nGlobalMetrics
+    fprintf(fid, '%s,', globalMetricNames{i});
 end
+fprintf(fid, '\n');
 
-%% Print Adjcacency Matrix
+writematrix(globalMetricsRandom, writePath, 'WriteMode', 'append');
+fclose(fid);
 
-for k = 1:nImages
-    
-    currentMaskName = AdjacencyMatrices{k, 1};
-    
-    % opening file for writing local metrics
-    WritePath = strcat(OutputPath, filesep, 'AdjacencyMatrix_', currentMaskName, graphTypeTag, '.csv');
-    csvwrite(WritePath, AdjacencyMatrices{k, 2});
+%% print local metrics
+writePath = strcat(outputPath, filesep, fileName, '-LocalMetrics-', graphTypeTag, '.csv');
+fid = fopen(writePath, 'w');
+
+for i = 1:nLocalMetrics
+    fprintf(fid, '%s,', localMetricNames{i});
+end
+fprintf(fid, '\n');
+
+writematrix(localMetrics, writePath, 'WriteMode', 'append');
+fclose(fid);
+
+%% print adjacency matrix
+writePath = strcat(outputPath, filesep, fileName, '-AdjacencyMatrix-', graphTypeTag, '.csv');
+csvwrite(writePath, adjacencyMatrixBinary);
+
+%% save cellInfoAllCells to file
+writePath = strcat(outputPath, filesep, fileName, '-cellInfoAllCells-', graphTypeTag, '.mat');
+save(writePath, 'cellInfoAllCells');
 end

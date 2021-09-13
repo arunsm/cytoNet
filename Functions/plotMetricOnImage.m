@@ -7,7 +7,7 @@ function f = plotMetricOnImage(cellLocations, masks, metric)
 
 CC = bwconncomp(masks);
 nNodes = size(cellLocations, 1);
-colors = parula(numel(unique(metric)));
+colors = hot(numel(unique(metric)));
 cmap = zeros(nNodes, 3);
 L = labelmatrix(CC);
 UniqueMetricValues = unique(metric);
@@ -19,10 +19,13 @@ end
 
 metricHeatmap = label2rgb(L, cmap);
 
-f = figure('Visible', 'Off'); set(gcf, 'color', 'w');
+%f = figure('Visible', 'Off'); 
+f = figure;
+set(gcf, 'color', 'w');
 imshow(metricHeatmap);
 hold on;
-c = colorbar;
+colormap(hot);
+c = colorbar ('northoutside');
 c.Ticks = [0 1];
 c.TickLabels = [min(metric), max(metric)];
 c.FontSize = 18;

@@ -12,6 +12,7 @@
 function [errorReport, cellInfoAllCells] = generateFunctionalGraph(filePath, mask)
 
 errorReport = [];
+warning('off','all')
 
 %% Setting up
 nSpikesThreshold = 2; % minimum number of spikes to determine an active cell
@@ -27,11 +28,10 @@ if nargin < 2
 end
 
 totalFrames = size(info, 1);
-mask = imresize(mask, [info(1).Height, info(1).Width]); % ensure mask and images are same dimensions
 CC = bwconncomp(mask);
-nCells = CC.NumObjects;
+nNodes = CC.NumObjects;
 
-if nCells == 0
+if nNodes == 0
     fn = getFileName(filePath);
     errorReport = makeErrorStruct(['no cells found in file ', fn], 1);
     cellInfo = [];
@@ -45,13 +45,14 @@ end
 cellInfoAllCells = struct;
 cellInfoAllCells.mask = mask;
 cellInfoAllCells.maxImage = maxImage;
-cellInfoAllCells.nCells = nCells;
+cellInfoAllCells.nNodes = nNodes;
+cellInfoAllCells.graphTypeTag = 'functional';
 
 stats = regionprops(CC, 'Centroid');
 
 % centroid locations of all cells
-cellInfoAllCells.cellLocations = zeros(nCells, 2);
-for k = 1:nCells
+cellInfoAllCells.cellLocations = zeros(nNodes, 2);
+for k = 1:nNodes
     current = stats(k);
     location = current.Centroid;
     cellInfoAllCells.cellLocations(k, 1) = location(1); % storing x location
@@ -59,12 +60,12 @@ for k = 1:nCells
 end
 
 % store unprocessed time-varying intensity for each ROI
-cellInfoAllCells.Fraw = zeros(totalFrames, nCells);
+cellInfoAllCells.Fraw = zeros(totalFrames, nNodes);
 for j = 1:totalFrames
     currentFrame = imread(filePath, j);
     stats = regionprops(CC, currentFrame, 'PixelValues', 'Area');
-    intensitiesCurrentFrame = zeros(1, nCells);
-    parfor k = 1:nCells
+    intensitiesCurrentFrame = zeros(1, nNodes);
+    parfor k = 1:nNodes
         current = stats(k);
         intensitiesCurrentFrame(k) = sum(current.PixelValues)/current.Area;
     end
@@ -75,11 +76,11 @@ fprintf('Data extracted \n')
 
 %% Process data: calculate F-F0/F0
 
-cellInfoAllCells.Fprocessed = zeros(totalFrames, nCells);
-cellInfoAllCells.F0 = zeros(totalFrames, nCells);
+cellInfoAllCells.Fprocessed = zeros(totalFrames, nNodes);
+cellInfoAllCells.F0 = zeros(totalFrames, nNodes);
 Fraw = cellInfoAllCells.Fraw;
 
-for j = 1:nCells % loop over all cells
+for j = 1:nNodes % loop over all cells
     currentF = Fraw(:, j);
     
     % subtract linear trend from mean intensity data
@@ -100,19 +101,19 @@ for j = 1:nCells % loop over all cells
     end
     
     cellInfoAllCells.F0(:, j) = F0; % store baseline intensity
-    cellInfoAllCells.Fprocessed(:, j) = (currentF - F0)./F0; % calculate delta F / F and store as Fprocessed
+    cellInfoAllCells.Fprocessed(:, j) = smooth((currentF - F0)./F0); % calculate delta F / F, smooth data, and store as Fprocessed
 end
 
 fprintf('Data processed \n')
 
 %% Filter out inactive cells to avoid false positives and measure activity
-cellInfoAllCells.activeCells = zeros(1, nCells); % marker vector for active cells
-cellInfoAllCells.nSpikes = zeros(1, nCells); % storing number of spikes for each cell
-for j = 1:nCells
+cellInfoAllCells.activeCells = zeros(1, nNodes); % marker vector for active cells
+cellInfoAllCells.nSpikes = zeros(1, nNodes); % storing number of spikes for each cell
+for j = 1:nNodes
     currentSignal = cellInfoAllCells.Fprocessed(:, j);
     
     % A spike is a peak whose deltaF/F value is at least 0.25 of the max value in the signal, or 0.05, whichever is higher
-    [spikes, ~] = findpeaks(currentSignal, 'MinPeakHeight', max(0.25*max(currentSignal), 0.05));
+    [spikes, ~] = findpeaks(currentSignal, 'MinPeakHeight', max(0.25*max(currentSignal), 0.05), 'MinPeakProminence', max(0.25*max(currentSignal), 0.05));
     
     cellInfoAllCells.nSpikes(j) = numel(spikes); % storing number of spikes
     
@@ -125,30 +126,33 @@ end
 %% Generate adjacency matrix based on cross-correlation of pixel intensities, only for active cells
 nActiveCells = sum(cellInfoAllCells.activeCells);
 A = zeros(nActiveCells, nActiveCells);
-timeSeries = cellInfoAllCells.Fprocessed;
+timeSeries = cellInfoAllCells.Fprocessed(:, find(cellInfoAllCells.activeCells));
 
 cutoff = generateCutoff(timeSeries, cutoffPercentile, maxLag); % calculate cutoff using scrambled data
 cellInfoAllCells.cutoffCorrelation = cutoff;
 fprintf('Cutoff generated \n')
 
-for j = 1:nActiveCells
-    correlations = zeros(length(A), 1);
-    timeSeries1 = timeSeries(:, j);
-    parfor k = j:nActiveCells
-        timeSeries2 = timeSeries(:, k);
-        if j ~= k
-            correlations(k) = max(xcov(timeSeries1, timeSeries2, maxLag, 'coeff'));
-        end    
-    end
-    A(j, :) = correlations;
-end
-functionalAdjacencyMatrixWeighted = A' + A;
-functionalAdjacencyMatrixWeighted(1:nActiveCells+1:end) = diag(A);
+% for j = 1:nActiveCells
+%     correlations = zeros(length(A), 1);
+%     timeSeries1 = timeSeries(:, j);
+%     parfor k = 1:nActiveCells
+%         timeSeries2 = timeSeries(:, k);
+%         if j ~= k
+%             correlations(k) = max(xcov(timeSeries1, timeSeries2, maxLag, 'coeff'));
+%         end
+%     end
+%     A(j, :) = correlations;
+% end
+% functionalAdjacencyMatrixWeighted = A' + A;
+% functionalAdjacencyMatrixWeighted(1:nActiveCells+1:end) = diag(A);
+
+A = corr(timeSeries);
+adjacencyMatrixWeighted = A - diag(diag(A)); % set diagonal elements to zero
 
 % create binary adjacency matrix
-functionalAdjacencyMatrixBinary = ones(size(functionalAdjacencyMatrixWeighted));
-functionalAdjacencyMatrixBinary(functionalAdjacencyMatrixWeighted < cutoff) = 0;
-cellInfoAllCells.functionalAdjacencyMatrixBinary = functionalAdjacencyMatrixBinary;
-cellInfoAllCells.functionalAdjacencyMatrixWeighted = functionalAdjacencyMatrixWeighted;
+adjacencyMatrixBinary = ones(size(adjacencyMatrixWeighted));
+adjacencyMatrixBinary(adjacencyMatrixWeighted < cutoff) = 0;
+cellInfoAllCells.functionalAdjacencyMatrixBinary = adjacencyMatrixBinary;
+cellInfoAllCells.functionalAdjacencyMatrixWeighted = adjacencyMatrixWeighted;
 fprintf('Adjacency Matrix created \n')
 end

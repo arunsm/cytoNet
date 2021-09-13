@@ -24,16 +24,20 @@ for j = 1:nCells
 end
 
 % generate vector of correlation coefficients
-crossCorrelation = [];
-parfor j = 1:nCells
-    scrambledTimeSeries1 = scrambledTimeSeries(:, j);
-    for k = (j+1):nCells
-        scrambledTimeSeries2 = scrambledTimeSeries(:, k);
-        if j ~= k
-            crossCorrelation = [crossCorrelation max(xcov(scrambledTimeSeries1, scrambledTimeSeries2, M, 'coeff'))];
-        end
-    end
-end
+% crossCorrelation = [];
+% parfor j = 1:nCells
+%     scrambledTimeSeries1 = scrambledTimeSeries(:, j);
+%     for k = (j+1):nCells
+%         scrambledTimeSeries2 = scrambledTimeSeries(:, k);
+%         if j ~= k
+%             crossCorrelation = [crossCorrelation max(xcov(scrambledTimeSeries1, scrambledTimeSeries2, M, 'coeff'))];
+%         end
+%     end
+% end
+
+A = corr(scrambledTimeSeries);
+crossCorrelation = A - diag(diag(A)); % set diagonal elements to zero
+crossCorrelation = squareform(crossCorrelation);
 
 % set cutoff
 cutoff = prctile(crossCorrelation, cutoffPercentile);

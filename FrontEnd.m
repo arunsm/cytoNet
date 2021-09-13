@@ -1,15 +1,15 @@
 
-function [errorReport, imageProcessingParams] = FrontEnd(InputPath, OutputPath, segmentationStruct, Mask2GraphStruct, sourceCodePath)
+function [errorReport, imageProcessingParams] = FrontEnd(inputPath, outputPath, segmentationStruct, Mask2GraphStruct, sourceCodePath)
 
 tic
 addpath(genpath([sourceCodePath, filesep, 'Functions']));
 
-if ~exist(OutputPath, 'file')
-    mkdir(OutputPath);
+if ~exist(outputPath, 'file')
+    mkdir(outputPath);
 end
 
 % calling engine
-[errorReport, imageProcessingParams] = Engine(InputPath, OutputPath, segmentationStruct, Mask2GraphStruct);
+[errorReport, imageProcessingParams] = Engine(inputPath, outputPath, segmentationStruct, Mask2GraphStruct);
 writeLog('[FrontEnd] Done');
 toc
 end
