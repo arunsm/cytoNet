@@ -6,12 +6,12 @@ fileNameBase = createBaseName(fileName);
 %% correlation between distance and functional edge strength
 cellLocationsConnectedCells = cellInfoAllCells.cellLocations(find(cellInfoAllCells.activeCells), :);
 cellDistancesConnectedCells = squareform(pdist(cellLocationsConnectedCells, 'Euclidean'));
-avgeDistanceConnectedCells = mean(cellDistancesConnectedCells(cellInfoAllCells.functionalAdjacencyMatrixWeighted~=0));
+avgeDistanceConnectedCells = mean(cellDistancesConnectedCells(cellInfoAllCells.adjacencyMatrixWeighted~=0));
 
 f = figure('Visible', 'Off');
 set(gcf, 'Color', 'w');
 if ~isempty(cellDistancesConnectedCells)
-    plot(cellDistancesConnectedCells, cellInfoAllCells.functionalAdjacencyMatrixWeighted, 'k.', 'MarkerSize', 16);
+    plot(cellDistancesConnectedCells, cellInfoAllCells.adjacencyMatrixWeighted, 'k.', 'MarkerSize', 16);
 end
 
 if isnan(cellInfoAllCells.cutoffCorrelation)
@@ -41,12 +41,12 @@ for k = 1:length(maskBoundaries)
     plot(currentBoundary(:, 2), currentBoundary(:, 1), 'r');
 end
 
-for k = 1:cellInfoAllCells.nCells
+for k = 1:cellInfoAllCells.nNodes
     text(cellInfoAllCells.cellLocations(k, 1), cellInfoAllCells.cellLocations(k, 2), num2str(k), 'color', 'r', 'FontSize', 8);
 end
 
-A = cellInfoAllCells.functionalAdjacencyMatrixWeighted;
-A(cellInfoAllCells.functionalAdjacencyMatrixWeighted < cellInfoAllCells.cutoffCorrelation) = 0;
+A = cellInfoAllCells.adjacencyMatrixWeighted;
+A(cellInfoAllCells.adjacencyMatrixWeighted < cellInfoAllCells.cutoffCorrelation) = 0;
 wgPlot(A, cellInfoAllCells.cellLocations(find(cellInfoAllCells.activeCells), :), ...
     'edgeColorMap', parula);
 set(findall(gcf,'type','line'), 'LineWidth', 1);
@@ -59,7 +59,7 @@ close(f);
 f = plotMetricOnImage(cellInfoAllCells.cellLocations, cellInfoAllCells.mask, cellInfoAllCells.nSpikes);
 hold on;
 
-for k = 1:cellInfoAllCells.nCells
+for k = 1:cellInfoAllCells.nNodes
     text(cellInfoAllCells.cellLocations(k, 1), cellInfoAllCells.cellLocations(k, 2), num2str(k), 'color', 'k', 'FontSize', 8);
 end
 

@@ -33,7 +33,6 @@ if segmentationRequested
     ctr = 1;
     for i = 1:nImages
         currentImageFile = strcat(InputPath, filesep, fnmeImages{i});
-        
         writeLog(sprintf('[Engine] Segmenting %s', currentImageFile));
         
         % make sure currentImageFile is a readable image file

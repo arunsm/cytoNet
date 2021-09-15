@@ -1,62 +1,50 @@
 % Script calling functions to generate functional graph, generate
 % functional network plots, compute graph-based metrics, and write metrics
 % to file
-% INPUT: filePath - directory path to input file, assumed to be a stacked
+% INPUT: errorReport = struct containing information on errors during processing, 
+% filePath - directory path to input file, assumed to be a stacked
 % .tif file containing calcium imaging data; outputDirName - directory path
-% to folder for output
+% to folder for output; optionalMask - optional binary mask file to define
+% ROIs
+
 % DEPENDENCIES:
 % Mike Wu (2021). wgPlot - Weighted Graph Plot (a better version of gplot)
 % https://www.mathworks.com/matlabcentral/fileexchange/24035-wgplot-weighted-graph-plot-a-better-version-of-gplot
 % MATLAB Central File Exchange
 
-function errorReport = calciumEngine(filePath, outputDirName, optionalMask)
+function errorReport = calciumEngine(errorReport, filePath, outputDirName, maskPath)
 
-info = imfinfo(filePath);
 fileName = getFileName(filePath);
-fileNameBase = createBaseName(fileName);
 
-fprintf('Generating functional graph... \n')
-
-if nargin < 3
-    [errorReport, cellInfoAllCells] = generateFunctionalGraph(filePath);
+% generate functional graph based on cross-correlation analysis
+if nargin < 4
+    [errorReport, cellInfoAllCells] = generateFunctionalGraph(errorReport, filePath);
 else
-    if size(optionalMask, 1) ~= info(1).Height || size(optionalMask, 2) ~= info(1).Width
-        errorReport = makeErrorStruct(['dimensions of mask and image file do not match', fileName], 1);
-        return;
-    end
-    [errorReport, cellInfoAllCells] = generateFunctionalGraph(filePath, optionalMask);
-end
-
-if ~isempty(errorReport)
-    return;
+    [errorReport, cellInfoAllCells] = generateFunctionalGraph(errorReport, filePath, maskPath);
 end
 
 if sum(cellInfoAllCells.activeCells) == 0
-    errorReport = makeErrorStruct(['no active cells found in file ', fileName], 1);
+    errorReport(end+1) = makeErrorStruct(['no active cells found in file ', fileName], 1);
     return;
 end
 
-generateFunctionalNetworkPlots(cellInfoAllCells, fileName, outputDirName);
-
-GlobalMetrics = {}; LocalMetrics = {};
-GlobalMetrics{1, 1} = fileNameBase; LocalMetrics{1, 1} = fileNameBase;
-AdjacencyMatrices = {}; AdjacencyMatrices{1, 1} = fileNameBase; AdjacencyMatrices{1, 2} = cellInfoAllCells.functionalAdjacencyMatrixBinary;
-
 % compute graph-based metrics
-[GlobalMetrics{1, 2}, LocalMetrics{1, 2}, GlobalMetricNames, LocalMetricNames, processParams] = ...
-    calculateNetworkMetrics(cellInfoAllCells.mask, cellInfoAllCells.functionalAdjacencyMatrixBinary);
+[cellInfoAllCells.globalMetrics, cellInfoAllCells.localMetrics, ...
+    cellInfoAllCells.globalMetricNames, cellInfoAllCells.localMetricNames, processParams] = ...
+    calculateNetworkMetrics(cellInfoAllCells.adjacencyMatrixBinary);
+writeLog('[calciumEngine] network metrics calculated');
+
+% compute network metrics for random graph
+cellInfoAllCells.globalMetricsRandom = calculateNetworkMetricsRandom(cellInfoAllCells);
+writeLog('[calciumEngine] network metrics for random graph calculated');
 
 if ~processParams.processCompleted
-    errorReport = makeErrorStruct(['processing for file ', fileName, ' exceeds computing capacity; graph not created'], 1);
+    errorReport(end+1) = makeErrorStruct(['processing for file ', fileName, ' exceeds computing capacity; graph not created'], 1);
 end
 
-% write metrics to file
-WriteNetworkMetrics(outputDirName, AdjacencyMatrices, ...
-    GlobalMetrics, GlobalMetricNames, LocalMetrics, LocalMetricNames, '_fun');
-
-% write cellInfoAllCells to file
-savePath = strcat(outputDirName, filesep, fileNameBase, '-cellInfoAllCells.m');
-save(savePath, 'cellInfoAllCells');
-
-% create spatial graph?
+% generate processed image plots and write metrics to file
+generateFunctionalNetworkPlots(cellInfoAllCells, fileName, outputDirName);
+writeLog('[calciumEngine] processed plots generated');
+writeNetworkMetrics(outputDirName, cellInfoAllCells);
+writeLog('[calciumEngine] metrics written to file');
 end

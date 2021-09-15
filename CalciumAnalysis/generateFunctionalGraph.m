@@ -1,43 +1,45 @@
 % Function to extract calcium time series data from an image stack and
 % compute a functional graph based on correlations among time series
 %
-% INPUT: filePath - stacked tif image file you wish to generate a graph for; 
-% mask (optional) - binary mask defining ROIs for time series extraction; 
-% if no mask is provided, the default segmentation program is run on 
+% INPUT: filePath - stacked tif image file you wish to generate a graph for;
+% mask (optional) - binary mask defining ROIs for time series extraction;
+% if no mask is provided, the default segmentation program is run on
 % the maximum intensity projection image
 %
 % OUTPUT: cellInfoAllCells - MATLAB structure containing calcium image
 % analysis parameters
 
-function [errorReport, cellInfoAllCells] = generateFunctionalGraph(filePath, mask)
-
-errorReport = [];
-warning('off','all')
+function [errorReport, cellInfoAllCells] = generateFunctionalGraph(errorReport, filePath, maskPath)
 
 %% Setting up
 nSpikesThreshold = 2; % minimum number of spikes to determine an active cell
 cutoffPercentile = 99; % percentile of scrambled correlations to be used for cutoff
 maxLag = 0; %  maximum value of lag allowed for calculating correlations
 
-info = imfinfo(filePath);
+fileName = getFileName(filePath);
+infoImage = imfinfo(filePath);
+
 maxImage = findMaxImage(filePath); % extract maximum intensity projection image
 
 % if mask not provided as input, run default segmentation
-if nargin < 2
+if nargin < 3
     mask = segmentWatershed(maxImage);
+else
+    infoMask = imfinfo(maskPath);
+    mask = imread(maskPath);
+    % reshape mask to fit size of calcium image stack
+    if infoMask.Height ~= infoImage(1).Height || infoMask.Width ~= infoImage(1).Width
+        mask = imresize(mask, [infoImage(1).Height, infoImage(1).Width]);
+    end
 end
 
-totalFrames = size(info, 1);
+totalFrames = size(infoImage, 1);
 CC = bwconncomp(mask);
-nNodes = CC.NumObjects;
+nCells = CC.NumObjects;
 
-if nNodes == 0
-    fn = getFileName(filePath);
-    errorReport = makeErrorStruct(['no cells found in file ', fn], 1);
-    cellInfo = [];
+if nCells == 0
+    errorReport(end+1) = makeErrorStruct(['no cells found in file ', fileName], 1);
     cellInfoAllCells = [];
-    maxImage = [];
-    A = [];
     return;
 end
 
@@ -45,14 +47,15 @@ end
 cellInfoAllCells = struct;
 cellInfoAllCells.mask = mask;
 cellInfoAllCells.maxImage = maxImage;
-cellInfoAllCells.nNodes = nNodes;
+cellInfoAllCells.adjacencyType = 3; % setting adjacencyType as 3 for functional graphs
 cellInfoAllCells.graphTypeTag = 'functional';
+cellInfoAllCells.fileName = fileName;
 
 stats = regionprops(CC, 'Centroid');
 
 % centroid locations of all cells
-cellInfoAllCells.cellLocations = zeros(nNodes, 2);
-for k = 1:nNodes
+cellInfoAllCells.cellLocations = zeros(nCells, 2);
+for k = 1:nCells
     current = stats(k);
     location = current.Centroid;
     cellInfoAllCells.cellLocations(k, 1) = location(1); % storing x location
@@ -60,27 +63,27 @@ for k = 1:nNodes
 end
 
 % store unprocessed time-varying intensity for each ROI
-cellInfoAllCells.Fraw = zeros(totalFrames, nNodes);
+cellInfoAllCells.Fraw = zeros(totalFrames, nCells);
 for j = 1:totalFrames
     currentFrame = imread(filePath, j);
     stats = regionprops(CC, currentFrame, 'PixelValues', 'Area');
-    intensitiesCurrentFrame = zeros(1, nNodes);
-    parfor k = 1:nNodes
+    intensitiesCurrentFrame = zeros(1, nCells);
+    parfor k = 1:nCells
         current = stats(k);
         intensitiesCurrentFrame(k) = sum(current.PixelValues)/current.Area;
     end
     cellInfoAllCells.Fraw(j, :) = intensitiesCurrentFrame;
 end
 
-fprintf('Data extracted \n')
+writeLog('[generateFunctionalGraph] data extracted');
 
 %% Process data: calculate F-F0/F0
 
-cellInfoAllCells.Fprocessed = zeros(totalFrames, nNodes);
-cellInfoAllCells.F0 = zeros(totalFrames, nNodes);
+cellInfoAllCells.Fprocessed = zeros(totalFrames, nCells);
+cellInfoAllCells.F0 = zeros(totalFrames, nCells);
 Fraw = cellInfoAllCells.Fraw;
 
-for j = 1:nNodes % loop over all cells
+for j = 1:nCells % loop over all cells
     currentF = Fraw(:, j);
     
     % subtract linear trend from mean intensity data
@@ -104,12 +107,12 @@ for j = 1:nNodes % loop over all cells
     cellInfoAllCells.Fprocessed(:, j) = smooth((currentF - F0)./F0); % calculate delta F / F, smooth data, and store as Fprocessed
 end
 
-fprintf('Data processed \n')
+writeLog('[generateFunctionalGraph] data processed');
 
 %% Filter out inactive cells to avoid false positives and measure activity
-cellInfoAllCells.activeCells = zeros(1, nNodes); % marker vector for active cells
-cellInfoAllCells.nSpikes = zeros(1, nNodes); % storing number of spikes for each cell
-for j = 1:nNodes
+cellInfoAllCells.activeCells = zeros(1, nCells); % marker vector for active cells
+cellInfoAllCells.nSpikes = zeros(1, nCells); % storing number of spikes for each cell
+for j = 1:nCells
     currentSignal = cellInfoAllCells.Fprocessed(:, j);
     
     % A spike is a peak whose deltaF/F value is at least 0.25 of the max value in the signal, or 0.05, whichever is higher
@@ -124,27 +127,12 @@ for j = 1:nNodes
 end
 
 %% Generate adjacency matrix based on cross-correlation of pixel intensities, only for active cells
-nActiveCells = sum(cellInfoAllCells.activeCells);
-A = zeros(nActiveCells, nActiveCells);
+nNodes = sum(cellInfoAllCells.activeCells);
 timeSeries = cellInfoAllCells.Fprocessed(:, find(cellInfoAllCells.activeCells));
 
 cutoff = generateCutoff(timeSeries, cutoffPercentile, maxLag); % calculate cutoff using scrambled data
 cellInfoAllCells.cutoffCorrelation = cutoff;
-fprintf('Cutoff generated \n')
-
-% for j = 1:nActiveCells
-%     correlations = zeros(length(A), 1);
-%     timeSeries1 = timeSeries(:, j);
-%     parfor k = 1:nActiveCells
-%         timeSeries2 = timeSeries(:, k);
-%         if j ~= k
-%             correlations(k) = max(xcov(timeSeries1, timeSeries2, maxLag, 'coeff'));
-%         end
-%     end
-%     A(j, :) = correlations;
-% end
-% functionalAdjacencyMatrixWeighted = A' + A;
-% functionalAdjacencyMatrixWeighted(1:nActiveCells+1:end) = diag(A);
+writeLog('[generateFunctionalGraph] cutoff generated');
 
 A = corr(timeSeries);
 adjacencyMatrixWeighted = A - diag(diag(A)); % set diagonal elements to zero
@@ -152,7 +140,8 @@ adjacencyMatrixWeighted = A - diag(diag(A)); % set diagonal elements to zero
 % create binary adjacency matrix
 adjacencyMatrixBinary = ones(size(adjacencyMatrixWeighted));
 adjacencyMatrixBinary(adjacencyMatrixWeighted < cutoff) = 0;
-cellInfoAllCells.functionalAdjacencyMatrixBinary = adjacencyMatrixBinary;
-cellInfoAllCells.functionalAdjacencyMatrixWeighted = adjacencyMatrixWeighted;
-fprintf('Adjacency Matrix created \n')
+cellInfoAllCells.adjacencyMatrixBinary = adjacencyMatrixBinary;
+cellInfoAllCells.adjacencyMatrixWeighted = adjacencyMatrixWeighted;
+cellInfoAllCells.nNodes = nNodes;
+writeLog('[generateFunctionalGraph] adjacency matrix created');
 end

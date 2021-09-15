@@ -19,8 +19,7 @@ end
 
 metricHeatmap = label2rgb(L, cmap);
 
-%f = figure('Visible', 'Off'); 
-f = figure;
+f = figure('Visible', 'Off'); 
 set(gcf, 'color', 'w');
 imshow(metricHeatmap);
 hold on;

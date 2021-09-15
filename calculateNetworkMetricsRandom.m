@@ -24,6 +24,8 @@ if adjacencyType == 2 % if spatial graph, use spatial null model (only type 2 gr
     end
     
 else % if functional graph or type 1 spatial graph, use random rewiring null model
+    nNodes = cellInfoAllCells.nNodes;
+    [kn, ~, ~] = degrees(cellInfoAllCells.adjacencyMatrixBinary);
     parfor i = 1:nRandomGraphs
         adjacencyMatrixRandom = random_graph(nNodes, [], [], 'sequence', kn);
         [globalMetricsRandom(i, :), ~, ~, ~, ~] = calculateNetworkMetrics(adjacencyMatrixRandom)

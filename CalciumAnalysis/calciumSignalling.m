@@ -3,37 +3,68 @@
 % combinations
 
 function statusArr = calciumSignalling(inputDirName, outputDirName, sourceCodePath)
-%addpath(genpath(sourceCodePath)); % add source code directory to path?
-addpath(genpath([sourceCodePath filesep 'Functions']));
+
+s = makeErrorStruct('', '');
+errorReport = repmat(s, 0);
+
+% add source code directory to path
+addpath(genpath(sourceCodePath));
 
 statusArr = repmat(makeErrorStruct('', ''), 0);
 
-d = dir(inputDirName);
-maxDigits = countDigits(numel(d));
+dirImages = dir(strcat(inputDirName, filesep, 'IMAGES'));
+maxDigits = countDigits(numel(dirImages));
 folderNum = 1;
-for i = 1:numel(d)
-    if d(i).isdir
+for i = 1:numel(dirImages)
+    if dirImages(i).isdir
         continue;
     end
-    fileName = d(i).name;
-    status = validateImageFile(inputDirName, fileName);
+    
+    % enter image files
+    fileName = dirImages(i).name;
+    imageFilePath = strcat(inputDirName, filesep, 'IMAGES', filesep, fileName);
+    status = validateImageFile(strcat(inputDirName, filesep, 'IMAGES'), fileName);
+    fileNameBase = createBaseName(fileName);
+    
+    % search for mask file with same base name as image file
+    dirMasks = dir(strcat(inputDirName, filesep, 'MASKS', filesep, fileNameBase, '.*'));
+    if numel(dirMasks) == 1
+        maskPath = [inputDirName, filesep, 'MASKS', filesep, dirMasks.name];
+        maskAvailable = 1;
+        try
+            mask = imread(maskPath);
+        catch
+            errorReport(end+1) = makeErrorStruct(['mask file ', dirMasks.name, ' is not a readable image file; using segmented maximum intensity image as mask'], 2);
+            maskAvailable = 0;
+        end
+    elseif ~islogical(mask)
+        errorReport(end+1) = makeErrorStruct(['mask file ', dirMasks.name, ' is not a binary image; using segmented maximum intensity image as mask'], 2);
+    else
+        maskAvailable = 0;
+    end
+    
     if ~isempty(status)
         statusArr(end+1) = status;
     else
         outputSubDirName = [outputDirName, filesep, pad(folderNum, maxDigits)];
         folderNum = folderNum + 1;
-        [status,msg] = mkdir(outputSubDirName);
+        [status, ~] = mkdir(outputSubDirName);
         if status ~= 1
             error('[calciumSignalling] Unable to create directory %s', outputSubDirName);
         end
-        fid = fopen([outputDirName, filesep, 'log.txt'], 'a');
-        fprintf(fid, '[calciumSignalling] Calling calciumEngine; fileName=%s\n', fileName);
-        fclose(fid);
-        errorReport = calciumEngine([inputDirName, filesep, fileName], outputSubDirName, optionalMask); % AM - calling calciumEngine; send optional mask here?
+
+        writeLog(sprintf('[calciumSignalling] calling calciumEngine; fileName=%s\n', fileName));
+        
+        if maskAvailable
+            errorReport = calciumEngine(errorReport, imageFilePath, outputSubDirName, maskPath);
+        else
+            errorReport = calciumEngine(errorReport, imageFilePath, outputSubDirName);
+        end
         if ~isempty(errorReport)
             statusArr(end+1) = errorReport;
         end
     end
+    writeLog('[calciumSignalling] done');
 end
 end
 
